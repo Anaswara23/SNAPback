@@ -11,8 +11,8 @@ describe('parseReceiptText', () => {
         `;
         const items = parseReceiptText(text);
         expect(items.length).toBe(2);
-        expect(items[0]).toEqual({ name: 'organic bananas', price: 1.99 });
-        expect(items[1]).toEqual({ name: 'whole milk', price: 2.5 });
+        expect(items[0]).toEqual({ name: 'organic bananas', price: 1.99, quantity: 1, unit: 'ea' });
+        expect(items[1]).toEqual({ name: 'whole milk', price: 2.5, quantity: 1, unit: 'ea' });
     });
 
     test('Format 2: Abbreviations and split names', () => {
@@ -28,7 +28,8 @@ describe('parseReceiptText', () => {
         expect(items.length).toBe(2);
         expect(items[0].name.includes('organic')).toBe(true);
         expect(items[0].price).toBe(3.99);
-        expect(items[1].name.includes('per pound')).toBe(true);
+        expect(items[1].name.includes('chicken breast')).toBe(true);
+        expect(items[1].unit).toBe('ea');
         expect(items[1].price).toBe(5.5);
     });
 
@@ -54,8 +55,9 @@ describe('parseReceiptText', () => {
         `;
         const items = parseReceiptText(text);
         expect(items.length).toBe(2);
-        expect(items[0].name.includes('12pk eggs')).toBe(true);
-        expect(items[1].name.includes('tofu')).toBe(true);
+        expect(items[0].name).toBe('eggs');
+        expect(items[0].quantity).toBe(12);
+        expect(items[1].name).toBe('tofu');
     });
 
     test('Format 5: Cultural items mixed with junk', () => {

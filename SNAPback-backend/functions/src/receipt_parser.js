@@ -18,7 +18,7 @@ const SKIP_KEYWORDS = [
 // Skip lines that look like dates, store IDs, or section headers (PRODUCE, PROTEIN, etc.)
 const DATE_PATTERN = /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/;
 const STOREID_PATTERN = /^\d{4,}$/;
-const SECTION_HEADER = /^[A-Z][A-Z\s\/]{2,}$/;  // ALL CAPS line with no price = section label
+const SECTION_HEADER = /^(PRODUCE|PROTEIN|GRAINS|DAIRY|SNACKS|DRINKS|GROCERY|MEAT|DELI|FROZEN|BAKERY)$/i;
 
 // Unit patterns to detect on a receipt line
 const UNIT_PATTERNS = [
