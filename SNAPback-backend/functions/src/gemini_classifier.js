@@ -13,7 +13,9 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { lookupItem } = require('./usda_lookup');
 const admin = require('firebase-admin');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY, {
+  apiVersion: 'v1beta',
+});
 
 /**
  * Classify a single item using USDA first, then Gemini.

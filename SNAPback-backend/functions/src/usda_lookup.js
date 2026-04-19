@@ -84,6 +84,18 @@ async function fetchNutrients(itemName) {
             .sort((a, b) => b.score - a.score);
 
         const food = ranked[0].food;
+
+        // ── Confidence check ──
+        // If NONE of the query words appear in the matched food description, reject.
+        // This prevents bad matches like "gummy bears" → "Beef, lean, protein"
+        const queryWords = itemName.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        const matchDesc = food.description.toLowerCase();
+        const hasMatch = queryWords.some(word => matchDesc.includes(word));
+        if (!hasMatch) {
+            console.log(`[USDA] Rejected low-confidence match for "${itemName}": "${food.description}"`);
+            return null;
+        }
+
         const nutrients = {};
 
         for (const [key, id] of Object.entries(NUTRIENT_IDS)) {

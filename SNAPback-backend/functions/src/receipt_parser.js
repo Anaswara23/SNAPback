@@ -15,9 +15,10 @@ const SKIP_KEYWORDS = [
     'market', 'grocery', 'supermarket'
 ];
 
-// Skip lines that look like dates or store IDs
+// Skip lines that look like dates, store IDs, or section headers (PRODUCE, PROTEIN, etc.)
 const DATE_PATTERN = /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/;
 const STOREID_PATTERN = /^\d{4,}$/;
+const SECTION_HEADER = /^[A-Z][A-Z\s\/]{2,}$/;  // ALL CAPS line with no price = section label
 
 // Unit patterns to detect on a receipt line
 const UNIT_PATTERNS = [
@@ -60,9 +61,11 @@ function extractUnitAndQuantity(line) {
 }
 
 function isSkipLine(line) {
-    const lower = line.toLowerCase().trim();
+    const trimmed = line.trim();
+    const lower = trimmed.toLowerCase();
     if (DATE_PATTERN.test(lower.replace(/\s/g, ''))) return true;
     if (STOREID_PATTERN.test(lower)) return true;
+    if (SECTION_HEADER.test(trimmed)) return true;  // e.g. PRODUCE, PROTEIN, GRAINS
     return SKIP_KEYWORDS.some(kw => lower.includes(kw));
 }
 
