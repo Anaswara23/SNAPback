@@ -1,0 +1,191 @@
+SNAPBACK — BACKEND TEAM WORK DIVISION
+
+Roshini | Anaswara | Hidhayath — Backend, AI & Infrastructure
+This document defines who owns what. All three of you are working in the same Firebase project. Coordinate on the shared Firestore schema and Cloud Functions repository.
+
+Team Overview
+Team Member
+Primary Role
+Delivers To Prithvi
+Roshini
+Gemini AI Pipeline + Food Classification
+Confirmed food scoring JSON schema
+Anaswara
+Cloud Functions + Firebase Architecture
+Deployed Cloud Functions + Firestore rules
+Hidhayath
+Scoring Engine + Data + Testing
+Uniform scoring formula + test receipts
+
+ROSHINI — Gemini AI Pipeline & Food Classification
+
+Your Responsibility
+You own everything related to using the Gemini API to classify grocery items from receipt text. Your work is called by Anaswara's Cloud Functions. You are not building the Cloud Function itself — you are building the AI logic that lives inside it.
+
+Task 1: Gemini API Integration Module
+Write a Node.js module (gemini_classifier.js) that Anaswara will import into her Cloud Function. It takes a list of grocery items and returns classification JSON.
+
+ // gemini_classifier.js — your deliverable  const { GoogleGenerativeAI } = require('@google/generative-ai');    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);    async function classifyItems(items, culturalPrefs) {    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });      const prompt = `      You are a nutrition classifier for a SNAP food rewards app.      Cultural preferences of this user: ${culturalPrefs.join(", ")}.        For EACH item, return a JSON array with exactly:      - name: cleaned item name (string)      - category: one of [fresh_produce, whole_grain, lean_protein, dairy,        legume, healthy_fat, canned_veg, frozen_veg, refined_grain,        processed_snack, sugary_drink, candy, other]      - healthScore: integer 0 to 5 ONLY      - isCultural: boolean        RULES:      - Plantains, yuca, taro, bitter melon → fresh_produce, score 5      - Sofrito, miso, garam masala → healthy_fat, score 3      - Score on nutrient density, NOT western food assumptions      - Return ONLY valid JSON array, zero explanation, no markdown        Items: ${JSON.stringify(items)}    `;      const result = await model.generateContent(prompt);    const text = result.response.text();    return JSON.parse(text);  }   module.exports = { classifyItems };
+
+Task 2: Cultural Food Database
+Build a JSON file (cultural_foods.json) that maps 500+ culturally specific food names to their correct health scores. This acts as a fast lookup cache BEFORE calling Gemini — if the item is in this list, skip the API call.
+	•	Caribbean: plantains (5), yuca/cassava (5), ackee (4), callaloo (5), breadfruit (4), sorrel (3)
+	•	Latin American: sofrito (3), achiote (3), masa harina (3), chayote (5), nopales (5), epazote (4)
+	•	South Asian: dal/lentils (5), ghee (3), paneer (3), turmeric (4), garam masala (3), methi (5)
+	•	East Asian: miso (3), tofu (4), edamame (5), bok choy (5), lotus root (4), dashi (3)
+	•	West African: fufu (3), egusi (4), ogbono (4), moringa (5), jollof base (3), suya spice (3)
+	•	Middle Eastern: tahini (3), za'atar (4), sumac (4), bulgur (4), labneh (3), freekeh (4)
+
+Task 3: Receipt Text Parser
+Write a parser function (receipt_parser.js) that takes raw OCR text from Google Cloud Vision and extracts structured items. This is harder than it sounds — receipts are messy.
+	•	Handle multi-word item names spread across lines
+	•	Extract price (last number on a line is usually the price)
+	•	Skip non-food lines: subtotal, tax, total, store name, date, cashier, rewards points
+	•	Handle common abbreviations: "ORG" = organic, "LB" = per pound, "EA" = each
+	•	Output: [{name: string, price: number}]
+
+Task 4: Response Validation & Error Handling
+	•	If Gemini returns malformed JSON: retry once, then fall back to cultural_foods.json lookup
+	•	If item not in cultural_foods.json and Gemini fails: default to healthScore: 2, category: "other"
+	•	Log all failures to Firestore collection: classificationErrors/{timestamp} for debugging
+
+Deliverables Checklist
+	•	gemini_classifier.js — tested module
+	•	cultural_foods.json — 500+ items minimum
+	•	receipt_parser.js — tested on at least 5 different receipt formats
+	•	Unit tests for the parser with sample receipts
+
+ANASWARA — Cloud Functions & Firebase Architecture
+
+Your Responsibility
+You own the Firebase project setup, all Cloud Functions, Firestore security rules, and the connection between all services. You import Roshini's module and Hidhayath's scoring formula into your functions.
+
+Task 1: Firebase Project Setup
+	•	Create Firebase project: SNAPback-prod on console.firebase.google.com
+	•	Enable: Authentication (Email/Password + Google), Cloud Firestore (production mode), Firebase Storage, Cloud Functions (Node.js 20), Cloud Messaging
+	•	Enable Google Cloud Vision API in the same Google Cloud project
+	•	Add GEMINI_API_KEY to Firebase Functions environment config
+	•	Share the project with the whole team: Roshini, Hidhayath, Prithvi
+	•	Run flutterfire configure with Prithvi to connect his Flutter app
+
+Task 2: Cloud Function 1 — OCR (Storage Trigger)
+This function fires automatically when Prithvi's Flutter app uploads a receipt image to Firebase Storage.
+ // functions/src/processReceipt.js  const { onObjectFinalized } = require('firebase-functions/v2/storage');  const { ImageAnnotatorClient } = require('@google-cloud/vision');  const { parseReceiptText } = require('./receipt_parser'); // Roshini's module  const admin = require('firebase-admin');    const visionClient = new ImageAnnotatorClient();  const db = admin.firestore();    exports.processReceipt = onObjectFinalized({ cpu: 2 }, async (event) => {    const filePath = event.data.name; // receipts/{uid}/{tripId}.jpg    const [uid, tripId] = filePath.split('/').slice(1, 3);      // Call Google Cloud Vision OCR    const [result] = await visionClient.textDetection(`gs://${event.data.bucket}/${filePath}`);    const rawText = result.fullTextAnnotation?.text || '';      // Parse raw text into structured items    const items = parseReceiptText(rawText); // Roshini's parser      // Save and trigger next function    await db.collection('users').doc(uid).collection('trips').doc(tripId)      .update({ rawItems: items, status: 'ocr_done' }); });
+
+Task 3: Cloud Function 2 — AI Classification (Firestore Trigger)
+Fires when a trip document status changes to "ocr_done".
+ // functions/src/classifyTrip.js  const { onDocumentUpdated } = require('firebase-functions/v2/firestore');  const { classifyItems } = require('./gemini_classifier'); // Roshini's module  const admin = require('firebase-admin');  const db = admin.firestore();    exports.classifyTrip = onDocumentUpdated('users/{uid}/trips/{tripId}', async (event) => {    const before = event.data.before.data();    const after = event.data.after.data();    if (before.status === after.status) return; // no change    if (after.status !== 'ocr_done') return;      const { uid, tripId } = event.params;    const userDoc = await db.collection('users').doc(uid).get();    const { culturalPrefs } = userDoc.data();      // Check cache first for each item    const cachedAndNew = await Promise.all(after.rawItems.map(async (item) => {      const cacheKey = item.name.toLowerCase().replace(/\s+/g, '_');      const cached = await db.collection('foodCache').doc(cacheKey).get();      if (cached.exists) return { ...item, ...cached.data() };      return item; // will be classified by Gemini    }));      const uncached = cachedAndNew.filter(i => !i.healthScore);    const classified = uncached.length > 0      ? await classifyItems(uncached, culturalPrefs)      : [];      // Merge + save cache    const allScored = cachedAndNew.map(item => {      const found = classified.find(c => c.name === item.name);      return found || item;    });      await event.data.after.ref.update({ scoredItems: allScored, status: 'classified' }); });
+
+Task 4: Cloud Function 3 — Score Engine (Firestore Trigger)
+Fires when status changes to "classified". Imports Hidhayath's scoring formula.
+ // functions/src/scoreTrip.js  const { onDocumentUpdated } = require('firebase-functions/v2/firestore');  const { calculateScore, calculateBonuses } = require('./scoring_engine'); // Hidhayath  const admin = require('firebase-admin');  const { FieldValue } = require('firebase-admin/firestore');  const db = admin.firestore();    exports.scoreTrip = onDocumentUpdated('users/{uid}/trips/{tripId}', async (event) => {    const after = event.data.after.data();    if (after.status !== 'classified') return;    const { uid } = event.params;      const userDoc = await db.collection('users').doc(uid).get();    const { snapAmount, familySize } = userDoc.data();      // Hidhayath's scoring engine    const result = calculateScore(after.scoredItems, snapAmount, familySize);    const bonuses = await calculateBonuses(uid, result, db);      const totalPoints = result.score + bonuses.total;    const credit = totalPoints / 100;      const batch = db.batch();    batch.update(event.data.after.ref, {      ...result, pointsEarned: totalPoints,      credit, status: 'done', bonuses: bonuses.details    });    batch.update(db.collection('users').doc(uid), {      totalPoints: FieldValue.increment(totalPoints),      monthlyCredit: FieldValue.increment(credit),      currentStreak: result.newStreak    });    await batch.commit(); });
+
+Task 5: Firestore Security Rules
+ rules_version = '2';  service cloud.firestore {    match /databases/{database}/documents {      // Users can only read/write their own doc      match /users/{uid} {        allow read, write: if request.auth.uid == uid;        // Users can read/write their own trips        match /trips/{tripId} {          allow read: if request.auth.uid == uid;          // Only create (not update scores — that's Cloud Functions)          allow create: if request.auth.uid == uid            && request.resource.data.status == 'uploading';        }      }      // Food cache is read-only for authenticated users      match /foodCache/{itemId} {        allow read: if request.auth != null;        allow write: if false; // Cloud Functions only      }    } }
+
+Deliverables Checklist — Anaswara
+	•	Firebase project created and shared with all team members
+	•	Google Cloud Vision API enabled
+	•	All 3 Cloud Functions deployed and tested
+	•	Firestore security rules deployed
+	•	Firebase Storage rules deployed
+	•	Environment variables configured (GEMINI_API_KEY)
+	•	Share deployment confirmation + project ID with Prithvi for Phase 3
+
+HIDHAYATH — Scoring Engine, Data & Testing
+
+Your Responsibility
+You own the scoring formula (the heart of SNAPback), the bonus points logic, the test suite, and ensuring the reward system is fair and uniform across all users. Your scoring_engine.js is imported by Anaswara's Cloud Function.
+
+Task 1: The Universal Scoring Engine
+This is the most important piece of logic in the entire app. It must be identical for every user regardless of SNAP amount or family size.
+ // scoring_engine.js — your primary deliverable    function calculateScore(scoredItems, snapAmount, familySize) {    // Step 1: Calculate totals    const tripTotal = scoredItems.reduce((s, i) => s + i.price, 0);    const healthySpend = scoredItems      .filter(i => i.healthScore >= 3)      .reduce((s, i) => s + i.price, 0);      // Step 2: Healthy Spend Ratio (HSR) — universal metric    const hsr = tripTotal > 0 ? healthySpend / tripTotal : 0;      // Step 3: Budget Effort — rewards active SNAP usage    const weeklySnap = snapAmount / 4;    const effort = Math.min(tripTotal / weeklySnap, 1.0);      // Step 4: Final score 0-100 — SAME formula for every user    const score = Math.round(hsr * effort * 100);      // Tip generation (simple rule-based, not AI)    const worstItem = scoredItems.sort((a, b) => a.healthScore - b.healthScore)[0];    const tip = worstItem && worstItem.healthScore < 2      ? `Consider swapping ${worstItem.name} for a healthier option next trip.`      : 'Great shopping! Keep building the habit.';      return { score, hsr, tripTotal, healthySpend, effort, tip };  }    // Bonus points — all thresholds are fixed, same for every user  const BONUS_RULES = {    threeStripStreak:  { threshold: 3,    points: 25, label: '3-trip streak' },    firstProduce:      { points: 20,              label: 'First fresh produce' },    newFoodCategory:   { points: 15,              label: 'New food category' },    zerUltraProcessed: { points: 25,              label: 'Zero ultra-processed trip' },    tenPctImprovement: { threshold: 0.10, points: 15, label: '10% score improvement' },    monthlyAvg60:      { threshold: 60,   points: 50, label: 'Monthly average 60+' },  };    async function calculateBonuses(uid, tripResult, db) {    // Query past trips to determine bonus eligibility    // ... (see full implementation in repo)    // Returns: { total: number, details: [{label, points}] }  }   module.exports = { calculateScore, calculateBonuses, BONUS_RULES };
+
+Task 2: Points → SNAP Credit Conversion (Fixed Rate)
+Rule
+Value
+Notes
+Base rate
+100 points = $1.00
+Same for every user
+Max per trip
+100 points
+Score is capped at 100
+Max per month
+~$4.00
+4 trips × 100 pts max
+Bonus max/month
++$1.25
+All bonus rules combined
+Deposit timing
+1st of each month
+Monthly batch
+
+Task 3: Health Score Reference (Fixed, Not AI)
+Define the ground-truth health scores for common item categories. This is what Roshini's Gemini prompt is based on. Keep this as a reference doc.
+Category
+Score
+Examples
+Fresh vegetables / cultural produce
+5
+Broccoli, plantains, yuca, bok choy
+Fresh fruit
+5
+Apples, mangoes, bananas
+Legumes / beans
+5
+Lentils, chickpeas, black beans
+Whole grains
+4
+Brown rice, oats, whole wheat
+Lean protein
+4
+Chicken breast, eggs, fish, tofu
+Frozen vegetables
+4
+Frozen peas, corn, mixed veg
+Canned veg (low sodium)
+3
+Canned tomatoes, chickpeas
+Nuts, seeds, healthy fats
+3
+Almonds, olive oil, avocado
+Cultural condiments
+3
+Miso, sofrito, garam masala
+Refined grains
+1
+White bread, white rice
+Processed snacks
+1
+Chips, crackers, cookies
+Sugary drinks
+0
+Soda, energy drinks, juice
+Candy / sweets
+0
+Candy bars, gummy bears
+
+Task 4: End-to-End Testing
+	•	Create 10 test receipts (photograph real grocery receipts or find samples online)
+	•	Test receipts should include: a pure healthy shop, a mixed shop, a mostly processed shop, receipts with cultural foods (plantains, yuca, bok choy), receipts with ambiguous items
+	•	For each receipt: run through the full pipeline manually and verify the score makes intuitive sense
+	•	Write a test script that runs scoring_engine.js against your 10 test cases
+	•	Verify that the SAME receipt gives the SAME score regardless of which user submits it
+
+Deliverables Checklist — Hidhayath
+	•	scoring_engine.js — complete with calculateScore() and calculateBonuses()
+	•	Health score reference table (confirmed with team)
+	•	10 test receipts with expected scores documented
+	•	Test script passing all cases
+	•	Verify: same receipt = same score for user with $200 SNAP and user with $1200 SNAP
+
+Team Coordination
+Shared Repository Structure
+ SNAPback-backend/  ├── functions/  │   ├── src/  │   │   ├── processReceipt.js     ← Anaswara  │   │   ├── classifyTrip.js       ← Anaswara  │   │   ├── scoreTrip.js          ← Anaswara  │   │   ├── gemini_classifier.js  ← Roshini  │   │   ├── receipt_parser.js     ← Roshini  │   │   ├── cultural_foods.json   ← Roshini  │   │   └── scoring_engine.js     ← Hidhayath  │   ├── package.json  │   └── index.js                  ← Anaswara (imports all functions)  ├── firestore.rules               ← Anaswara  ├── storage.rules                 ← Anaswara  └── test/     └── test_receipts/            ← Hidhayath
+
+Handoff to Prithvi (Phase 3)
+	•	Anaswara: share Firebase project ID and confirm all functions are deployed
+	•	Hidhayath: share the scoring formula documentation so Prithvi can display values correctly
+	•	Roshini: provide 3 sample receipt outputs (JSON) so Prithvi can test his Trip Result UI with realistic data
+	•	All three: confirm Firestore schema matches exactly what is in Prithvi's document (Section 4)

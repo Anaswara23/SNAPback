@@ -1,0 +1,279 @@
+PLATEWISE — FULL PROJECT DOCUMENT
+
+George Hacks 2026  |  FAO Track 1  |  Team PlateWise
+Team: Prithvi (Flutter) · Roshini (AI) · Anaswara (Backend) · Hidhayath (Scoring & QA)
+
+1. Problem Statement
+42 million Americans receive SNAP (Supplemental Nutrition Assistance Program) benefits every month. SNAP provides critical food purchasing power for low-income families — but the program makes zero distinction between buying broccoli or buying chips. Every dollar is treated identically.
+
+This creates a broken incentive structure. A family stretched thin on $400/month naturally gravitates toward cheap, calorie-dense ultra-processed foods because they are filling and affordable. There is no financial reason to choose healthier options. The result is a paradox: people receiving food assistance — who most need good nutrition — face the highest rates of diet-related disease (obesity, Type 2 diabetes, hypertension).
+
+The Core Gap
+SNAP tells people what they CAN buy. It says nothing about what they SHOULD buy. And it certainly doesn't reward them for making better choices. PlateWise fills this gap.
+
+2. The Solution — PlateWise
+"Eat better. Earn more. No judgment."
+
+PlateWise is a mobile app that turns every grocery receipt into a financial opportunity. After every shopping trip, users photograph their receipt. AI reads every item, scores how nutritious their purchases were relative to their own budget and family size, and awards points. Points convert to real bonus SNAP credit — deposited directly to their EBT card monthly.
+
+The key innovation: the scoring formula is normalized against each user's own SNAP budget and family size, making it completely fair and universal. A family of 6 on $800/month and a single person on $200/month are evaluated by the same formula. Nobody is compared to an impossible ideal. Everyone is rewarded for improvement relative to their own situation.
+
+3. Complete User Journey
+Step
+Action
+What Happens
+Technology
+1
+Register
+User enters SNAP amount, family size, cultural food prefs, language
+Firebase Auth + Firestore
+2
+Shop normally
+User shops at any SNAP-eligible grocery store as usual
+No app involvement
+3
+Snap receipt
+Photo taken or uploaded from gallery after checkout
+Flutter image_picker
+4
+Upload
+Image sent to Firebase Storage. Trip document created in Firestore
+Firebase Storage
+5
+OCR
+Cloud Function reads image with Google Vision API, extracts all items and prices
+Google Cloud Vision
+6
+AI classify
+Gemini API assigns health score (0–5) and food category to each item. Cultural foods handled correctly.
+Gemini API
+7
+Score
+Universal formula calculates trip score 0–100. Bonus points applied. SNAP credit calculated.
+Scoring Engine
+8
+Result
+Flutter app receives score via real-time Firestore listener. Shows breakdown, tip, points earned.
+Firestore + Flutter
+9
+Monthly payout
+Accumulated SNAP credit (points ÷ 100) deposited to user's EBT card on 1st of month
+USDA GusNIP program
+
+4. Complete Technology Stack
+Mobile App (Flutter)
+Package
+Version
+Purpose
+Flutter
+Latest stable
+Cross-platform iOS + Android
+firebase_core / auth / firestore / storage / messaging
+Latest
+Full Firebase integration
+flutter_riverpod
+^2.5.1
+State management
+go_router
+^13.2.0
+Navigation
+image_picker + image_cropper
+^1.0.7
+Receipt camera capture
+fl_chart
+^0.68.0
+Score ring and progress charts
+lottie
+^3.1.0
+Reward celebration animations
+intl
+^0.19.0
+English, Spanish, Mandarin support
+
+Backend (Firebase + GCP)
+Service
+Role
+Firebase Authentication
+User login/signup (email + Google)
+Cloud Firestore
+Real-time database: user profiles, trip history, scores, food cache
+Firebase Storage
+Receipt image storage — triggers Cloud Functions
+Cloud Functions (Node.js 20)
+3 functions: OCR → Classify → Score, all triggered automatically
+Firebase Cloud Messaging
+Push notifications for streak reminders
+Google Cloud Vision API
+Receipt OCR — free student tier, same GCP project as Firebase
+Gemini API (google/generative-ai)
+Food item classification — free student trial, 1.5-flash model
+
+5. The Scoring Formula — How Rewards Work
+Principle
+The formula is IDENTICAL for every user. It normalizes by SNAP amount and family size so nobody is penalized for having a smaller budget or a larger family. Rewards are based on proportion, not absolute dollar amounts.
+
+Formula Steps
+	•	Healthy Spend Ratio (HSR) = Healthy Spend ÷ Trip Total
+Items scoring 3+ are "healthy". HSR is a percentage: what fraction of this trip was nutritious?
+
+	•	Budget Effort = Trip Spend ÷ (Monthly SNAP ÷ 4)
+Rewards people who actively use their SNAP. Capped at 1.0 (cannot exceed weekly budget).
+
+	•	Trip Score = HSR × Budget Effort × 100 (rounded, capped at 100)
+The final score. Same formula, every user, every trip.
+
+	•	SNAP Credit = Score ÷ 100 dollars
+100 points = $1.00. A perfect trip earns $1.00 in bonus SNAP.
+
+Fixed Bonus Point Rules
+Bonus Trigger
+Points
+Notes
+3 consecutive trips with score > 50
++25
+Streak bonus
+First time buying fresh produce
++20
+Onboarding reward
+New food category tried for first time
++15
+Diversity reward
+Zero ultra-processed items in a trip
++25
+Clean trip bonus
+HSR improved 10%+ vs personal last trip
++15
+Personal improvement
+Monthly average score above 60
++50
+Monthly milestone
+
+6. Cultural Inclusion — Why This Matters
+Most nutrition apps penalize non-Western eating patterns. If an AI doesn't recognize plantains as healthy produce, a Caribbean family's entire shopping pattern gets scored incorrectly. PlateWise solves this with a cultural food database and by instructing the Gemini model with explicit cultural context.
+
+	•	Plantains, yuca/cassava, taro, bitter melon → classified as fresh_produce, health score 5
+	•	Sofrito, miso paste, garam masala, za'atar → classified as healthy_fat, health score 3
+	•	Fufu, injera, masa harina → classified as whole_grain equivalent
+	•	Users select cultural preferences at registration → Gemini prompt is customized per user
+	•	App UI available in English, Spanish, and Mandarin by default
+
+7. Firestore Data Architecture
+ Firestore Structure:
+ 
+ users/ (collection)
+   {uid}/ (document)
+     snapAmount: number
+     familySize: number
+     culturalPrefs: string[]
+     language: string
+     totalPoints: number        ← written by Cloud Functions
+     currentStreak: number      ← written by Cloud Functions
+     monthlyCredit: number      ← written by Cloud Functions
+ 
+     trips/ (subcollection)
+       {tripId}/ (document)
+         timestamp: Timestamp
+         receiptUrl: string
+         status: "uploading" | "ocr_done" | "classified" | "done" | "error"
+         tripTotal: number      ← written by Cloud Functions
+         healthySpend: number   ← written by Cloud Functions
+         hsr: number            ← written by Cloud Functions
+         score: number          ← written by Cloud Functions
+         pointsEarned: number   ← written by Cloud Functions
+         items: [{name, price, healthScore, category, isCultural}]
+         tip: string            ← AI-generated nudge message
+ 
+ foodCache/ (collection)        ← shared across all users, saves Gemini API calls
+   {itemHash}/ (document)
+     itemName: string
+     category: string
+     healthScore: number
+    isCultural: boolean
+
+8. Cloud Functions Pipeline
+All three Cloud Functions are triggered automatically — the Flutter app never calls them directly. The chain is:
+
+Function 1: processReceipt
+Trigger: new image uploaded to Firebase Storage
+Action: calls Google Cloud Vision OCR → extracts items → writes to Firestore trip doc → sets status: "ocr_done"
+
+Function 2: classifyTrip
+Trigger: Firestore trip doc status changes to "ocr_done"
+Action: checks foodCache for each item → calls Gemini API for uncached items → saves to cache → sets status: "classified"
+
+Function 3: scoreTrip
+Trigger: Firestore trip doc status changes to "classified"
+Action: runs scoring formula → calculates bonuses → batch-writes score to trip + updates user totals → sets status: "done" → Flutter UI updates automatically
+
+9. Mobile App Screens
+Screen
+Route
+Key Features
+Onboarding
+/onboarding
+Firebase Auth, 3-step profile setup, cultural prefs multi-select
+Home Dashboard
+/home
+Live score ring, streak counter, SNAP earned, "Scan Receipt" CTA
+Scan Receipt
+/scan
+Camera/gallery, upload, Lottie processing animation, real-time listener
+Trip Result
+/trip/:id
+Score display, item breakdown with health bars, AI tip, points earned
+Rewards Wallet
+/wallet
+Trip history, monthly credit total, deposit timeline, bonus history
+Profile
+/profile
+Edit SNAP/family/prefs, language switch, sign out
+
+10. Build Plan & Milestones
+Prithvi — Flutter App (3 Phases)
+Phase
+Goal
+Tasks
+Phase 1
+Complete UI with fake data
+All 6 screens built, navigation working, fake data constants, all widgets styled
+Phase 2
+Firebase Auth + Profile
+Real login/signup, Firestore user doc, auth state persistence, profile edit
+Phase 3
+Full Integration
+Real upload, real Firestore listeners, replace all placeholders with live data
+
+Backend Team — Parallel Workstreams
+Who
+Milestone
+Roshini
+Gemini classifier module + receipt parser + cultural food database (500+ items)
+Anaswara
+Firebase project setup + all 3 Cloud Functions deployed + Firestore rules
+Hidhayath
+Scoring engine + bonus logic + 10 test receipts + QA sign-off
+All + Prithvi
+Phase 3 integration — backend hands off to Prithvi, end-to-end test
+
+11. Hackathon Pitch — Key Points
+The Problem in One Sentence
+SNAP gives people money for food but never rewards them for eating well — so nothing changes.
+
+The Solution in One Sentence
+PlateWise scans your grocery receipt and earns you real SNAP credit back — the healthier you shop, the more you earn.
+
+Why This Wins
+	•	Zero behavior change required to start — users just photograph a receipt they already have
+	•	Financial incentive, not moral lecturing — people respond to money, not guilt
+	•	Fair to everyone — same formula regardless of budget or family size
+	•	Culturally inclusive — plantains score 5 stars, not penalized for being "non-western"
+	•	Real AI pipeline — Gemini + Google Vision + Firebase, all production-ready tech
+	•	Directly addresses FAO problem statement: equitable, personalized, culturally relevant nutrition
+
+Demo Script (3 minutes)
+	•	Show the problem: "SNAP doesn't care what you buy. There's no reward for eating well."
+	•	Open the app: show the home dashboard with score and streak
+	•	Scan a real receipt: watch the Lottie animation while AI processes
+	•	Show the result: item breakdown with plantains scoring 5 stars — this is the equity moment
+	•	Show the wallet: "$3.42 earned this month. Deposits to EBT on May 1st."
+	•	Close: "42 million SNAP users. One photo. Real money back. PlateWise."
