@@ -1,0 +1,14 @@
+{
+  "name": "snapback-functions-hotfix",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/storage": "^7.19.0",
+    "@google/genai": "^1.50.1",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^5.1.1"
+  }
+}

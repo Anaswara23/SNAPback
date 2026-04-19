@@ -1,0 +1,58 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "SNAPback · iPhone 17 Pro Max Simulator · Debug",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "70FD91B5-8C31-48E5-9AFB-0491933F24E5",
+      "flutterMode": "debug"
+    },
+    {
+      "name": "SNAPback · iPhone 17 Pro Max Simulator · Profile",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "70FD91B5-8C31-48E5-9AFB-0491933F24E5",
+      "flutterMode": "profile"
+    },
+    {
+      "name": "SNAPback · iPhone (Prithvi) · Debug",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "00008150-001C1DCE1102401C",
+      "flutterMode": "debug"
+    },
+    {
+      "name": "SNAPback · iPhone (Prithvi) · Profile",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "00008150-001C1DCE1102401C",
+      "flutterMode": "profile"
+    },
+    {
+      "name": "SNAPback · iPhone (Prithvi) · Release",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "00008150-001C1DCE1102401C",
+      "flutterMode": "release"
+    },
+    {
+      "name": "SNAPback · macOS · Debug",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "macos",
+      "flutterMode": "debug"
+    },
+    {
+      "name": "SNAPback · Attach to running process",
+      "request": "attach",
+      "type": "dart"
+    }
+  ]
+}

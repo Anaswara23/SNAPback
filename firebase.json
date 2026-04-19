@@ -1,0 +1,39 @@
+{
+  "functions": {
+    "source": "functions"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "snapback-prod-prithvi-2026",
+          "appId": "1:281916054096:android:e53871a680fa540c38cf55",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "snapback-prod-prithvi-2026",
+          "appId": "1:281916054096:ios:56acc15a32cdd9f738cf55",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "snapback-prod-prithvi-2026",
+          "configurations": {
+            "android": "1:281916054096:android:e53871a680fa540c38cf55",
+            "ios": "1:281916054096:ios:56acc15a32cdd9f738cf55"
+          }
+        }
+      }
+    }
+  }
+}
